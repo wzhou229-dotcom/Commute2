@@ -1,0 +1,56 @@
+name: commute-v2
+
+on:
+  schedule:
+    # Recommend runs at 07:00 Chicago time = 12:00 UTC (CST) or 13:00 UTC (CDT)
+    # Using 12:00 UTC — adjust to 13:00 in summer if needed, or use a matrix
+    - cron: "00 12 * * 1-5"   # recommend: Mon–Fri 07:00 CST
+    - cron: "30 12 * * 1-5"   # collect start: 07:30 CST (script sleeps until each slot)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "SAMPLE_MODE (recommend | collect | both)"
+        default: "both"
+      force_run:
+        description: "FORCE_RUN (1 = bypass weekend/end-date checks)"
+        default: "0"
+      force_date:
+        description: "FORCE_DATE (YYYY-MM-DD, optional)"
+        default: ""
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to push CSV data back to repo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests pytz
+
+      - name: Run commute_v2.py
+        env:
+          SERPAPI_KEY:    ${{ secrets.SERPAPI_KEY }}
+          SMTP_HOST:      ${{ secrets.SMTP_HOST }}
+          SMTP_PORT:      ${{ secrets.SMTP_PORT }}
+          SMTP_USER:      ${{ secrets.SMTP_USER }}
+          SMTP_PASS:      ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL:   ${{ secrets.NOTIFY_EMAIL }}
+          SAMPLE_MODE:    ${{ github.event.inputs.mode || 'both' }}
+          FORCE_RUN:      ${{ github.event.inputs.force_run || '0' }}
+          FORCE_DATE:     ${{ github.event.inputs.force_date || '' }}
+        run: python commute_v2.py
+
+      - name: Commit and push data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet || git commit -m "data: commute_v2 $(date -u +'%Y-%m-%d')"
+          git push
