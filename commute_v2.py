@@ -38,7 +38,7 @@ OD = {
 }
 
 # Collection window
-WINDOW = {"start": "07:30", "end": "08:15", "step_min": 5}   # 10 slots: 07:30..08:10
+WINDOW = {"start": "07:35", "end": "08:05", "step_min": 5}   # 7 slots: 07:35..08:05
 WEEKDAYS_ONLY    = True
 RUN_END_DATE     = "2026-12-31"
 
@@ -508,12 +508,14 @@ def _send_recommend_email(today, weekday, wx_class, temp_c, wx_adj,
         f"(safe: {safe['slot']})"
     )
 
-    table_rows = "\n".join(
-        f"  {r['slot']}  →  est. {r['est_arrival']}  "
-        f"({'on time ✓' if r['delta_min'] <= 0 else f\"+{r['delta_min']:.0f} min late\"})  "
-        f"[P80: {r['p_drive']:.0f} min, n={r['n_samples']}]"
-        for r in all_results
-    )
+    table_rows_parts = []
+    for r in all_results:
+        status = 'on time ✓' if r['delta_min'] <= 0 else f"+{r['delta_min']:.0f} min late"
+        table_rows_parts.append(
+            f"  {r['slot']}  →  est. {r['est_arrival']}  ({status})  "
+            f"[P80: {r['p_drive']:.0f} min, n={r['n_samples']}]"
+        )
+    table_rows = "\n".join(table_rows_parts)
 
     body = f"""Good morning! Here's your I-290 commute forecast for {date_str}.
 
@@ -537,16 +539,26 @@ Data source: {'V2 only' if not rec.get('v1_only') else 'V1 cold-start bootstrap'
     # HTML version (nicer in email clients)
     rec_color  = "#1D9E75"
     safe_color = "#378ADD"
-    html_rows  = "".join(
-        f"<tr style='background:{'#f0faf5' if r['slot']==rec['slot'] else '#edf6ff' if r['slot']==safe['slot'] else 'white'};'>"
-        f"<td style='padding:6px 12px;font-weight:{'700' if r['slot'] in (rec['slot'],safe['slot']) else '400'};'>{r['slot']}</td>"
-        f"<td style='padding:6px 12px;'>{r['est_arrival']}</td>"
-        f"<td style='padding:6px 12px;color:{'#1D9E75' if r['delta_min']<=0 else '#E24B4A'};'>"
-        f"{'on time ✓' if r['delta_min']<=0 else f'+{r[\"delta_min\"]:.0f} min late'}</td>"
-        f"<td style='padding:6px 12px;color:#888;font-size:12px;'>{r['p_drive']:.0f} min  (n={r['n_samples']})</td>"
-        f"</tr>"
-        for r in all_results
-    )
+    html_rows_parts = []
+    for r in all_results:
+        if r['slot'] == rec['slot']:
+            bg = '#f0faf5'
+        elif r['slot'] == safe['slot']:
+            bg = '#edf6ff'
+        else:
+            bg = 'white'
+        fw = '700' if r['slot'] in (rec['slot'], safe['slot']) else '400'
+        delta_color = '#1D9E75' if r['delta_min'] <= 0 else '#E24B4A'
+        status = 'on time ✓' if r['delta_min'] <= 0 else f"+{r['delta_min']:.0f} min late"
+        html_rows_parts.append(
+            f"<tr style='background:{bg};'>"
+            f"<td style='padding:6px 12px;font-weight:{fw};'>{r['slot']}</td>"
+            f"<td style='padding:6px 12px;'>{r['est_arrival']}</td>"
+            f"<td style='padding:6px 12px;color:{delta_color};'>{status}</td>"
+            f"<td style='padding:6px 12px;color:#888;font-size:12px;'>{r['p_drive']:.0f} min  (n={r['n_samples']})</td>"
+            f"</tr>"
+        )
+    html_rows = "".join(html_rows_parts)
     cold_html = (
         f"<p style='color:#BA7517;font-size:13px;'>⚠️ {cold_note.strip()}</p>"
         if cold_note else ""
